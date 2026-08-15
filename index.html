@@ -135,11 +135,13 @@
   </div>
 
   <div class="charttoolbar">
+    <button class="tf-pill" data-tf="1S">1ວິ</button>
+    <button class="tf-pill" data-tf="1M">1ນາທີ</button>
+    <button class="tf-pill active" data-tf="5M">5ນາທີ ▾</button>
     <button class="tf-pill" data-tf="15M">15ນາທີ</button>
     <button class="tf-pill" data-tf="1H">1ຊົ່ວໂມງ</button>
     <button class="tf-pill" data-tf="4H">4ຊົ່ວໂມງ</button>
     <button class="tf-pill" data-tf="1D">1ວັນ</button>
-    <button class="tf-pill active" data-tf="5M">5ນາທີ ▾</button>
     <span class="toolicon">⛶</span><span class="toolicon">☰</span><span class="toolicon">▦</span>
   </div>
 
@@ -234,8 +236,8 @@ const ASSETS = {
   XAUUSD: {label:'XAU/USD', quote:'USD', baseSymbol:'XAU', symbol:'PAXGUSDT', decimals:2},
   BTCUSDT: {label:'BTC/USDT', quote:'USDT', baseSymbol:'BTC', symbol:'BTCUSDT', decimals:2},
 };
-const TF_SECONDS = {"15M":900,"1H":3600,"4H":14400,"1D":86400,"5M":300};
-const TF_BINANCE = {"15M":"15m","1H":"1h","4H":"4h","1D":"1d","5M":"5m"};
+const TF_SECONDS = {"1S":1,"1M":60,"15M":900,"1H":3600,"4H":14400,"1D":86400,"5M":300};
+const TF_BINANCE = {"1S":"1s","1M":"1m","15M":"15m","1H":"1h","4H":"4h","1D":"1d","5M":"5m"};
 
 let state = { asset:"XAUUSD", tf:"5M", candles:[], live:0, chg:0, hi24:0, lo24:0, volBaseLive:0, volQuoteLive:0, loadSeq:0, indicators:{MA:false,EMA:false,BOLL:true,SAR:false,AVL:false,SUPER:false,VOL:true,MACD:true,RSI:true,KDJ:false,OBV:false,WR:false,STOCHRSI:true,ATR:false} };
 let ws=null;
@@ -586,16 +588,31 @@ function startPollingFallback(){
     if(ws && ws.readyState===WebSocket.OPEN) return;
     const mySeq = state.loadSeq;
     const cfg=ASSETS[state.asset];
+    const interval=TF_BINANCE[state.tf]||'5m';
     try{
-      const res=await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${cfg.symbol}`);
-      const d=await res.json();
+      const [tRes, kRes] = await Promise.all([
+        fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${cfg.symbol}`),
+        fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=${interval}&limit=3`)
+      ]);
+      if(mySeq!==state.loadSeq) return;
+      const d=await tRes.json();
+      const rawK=await kRes.json();
       if(mySeq!==state.loadSeq) return;
       state.live=+d.lastPrice; state.chg=+d.priceChangePercent;
       state.hi24=+d.highPrice; state.lo24=+d.lowPrice;
       state.volBaseLive=+d.volume; state.volQuoteLive=+d.quoteVolume;
       refreshHeader();
+      if(Array.isArray(rawK) && rawK.length && state.candles.length){
+        rawK.forEach((k,i)=>{
+          const cndl={open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]};
+          const idxFromEnd = rawK.length-1-i;
+          const targetIdx = state.candles.length-1-idxFromEnd;
+          if(targetIdx>=0 && idxFromEnd===0){ state.candles[state.candles.length-1]=cndl; }
+        });
+        drawCandles(); updatePanels();
+      }
     }catch(e){}
-  }, 5000);
+  }, 4000);
 }
 
 async function loadAssetTf(){
