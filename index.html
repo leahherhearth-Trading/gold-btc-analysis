@@ -98,7 +98,7 @@
 </head>
 <body>
 <div class="frame">
-  <div class="demo-banner">⚠ DEMO DATA — NOT REAL MARKET DATA · Decision Support Only, no order is ever sent automatically</div>
+  <div class="demo-banner">⚠ LIVE DATA (Binance) — Gold ໃຊ້ PAXG ເປັນຕົວແທນ (proxy) · Decision Support Only, no order is ever sent automatically</div>
 
   <div class="header">
     <div class="left">
@@ -231,32 +231,17 @@
 
 <script>
 const ASSETS = {
-  XAUUSD: {label:'XAU/USD', quote:'USD', base:2415.30, vol:0.06, decimals:2},
-  BTCUSDT: {label:'BTC/USDT', quote:'USDT', base:63078.07, vol:0.9, decimals:2},
+  XAUUSD: {label:'XAU/USD', quote:'USD', baseSymbol:'XAU', symbol:'PAXGUSDT', decimals:2},
+  BTCUSDT: {label:'BTC/USDT', quote:'USDT', baseSymbol:'BTC', symbol:'BTCUSDT', decimals:2},
 };
 const TF_SECONDS = {"15M":900,"1H":3600,"4H":14400,"1D":86400,"5M":300};
+const TF_BINANCE = {"15M":"15m","1H":"1h","4H":"4h","1D":"1d","5M":"5m"};
 
-let state = { asset:"BTCUSDT", tf:"5M", candles:[], live:63078.07, tickCount:0, indicators:{MA:false,EMA:false,BOLL:true,SAR:false,AVL:false,SUPER:false,VOL:true,MACD:true,RSI:true,KDJ:false,OBV:false,WR:false,STOCHRSI:true,ATR:false} };
+let state = { asset:"XAUUSD", tf:"5M", candles:[], live:0, chg:0, hi24:0, lo24:0, volBaseLive:0, volQuoteLive:0, loadSeq:0, indicators:{MA:false,EMA:false,BOLL:true,SAR:false,AVL:false,SUPER:false,VOL:true,MACD:true,RSI:true,KDJ:false,OBV:false,WR:false,STOCHRSI:true,ATR:false} };
+let ws=null;
 
 function seededRand(seed){ let s = seed % 2147483647; if (s<=0) s+=2147483646;
   return function(){ s = (s*16807)%2147483647; return (s-1)/2147483646; }; }
-
-function genCandles(asset, tf, n=120){
-  const cfg = ASSETS[asset];
-  const rnd = seededRand(asset.length*131 + tf.length*7 + tf.charCodeAt(0));
-  let price = cfg.base;
-  const candles = [];
-  for(let i=0;i<n;i++){
-    const shock = (rnd()-0.5)*2*cfg.vol;
-    const open = price;
-    const close = price + shock;
-    const high = Math.max(open,close) + Math.abs(rnd())*cfg.vol*0.6;
-    const low = Math.min(open,close) - Math.abs(rnd())*cfg.vol*0.6;
-    candles.push({open,high,low,close,volume: 500+rnd()*900});
-    price = close;
-  }
-  return candles;
-}
 function sma(arr,p){ const out=[]; for(let i=0;i<arr.length;i++){ if(i<p-1){out.push(null);continue;} let s=0; for(let j=i-p+1;j<=i;j++) s+=arr[j]; out.push(s/p);} return out; }
 function ema(values, period){ const k=2/(period+1); let prev=values[0]; const out=[prev]; for(let i=1;i<values.length;i++){ prev=values[i]*k+prev*(1-k); out.push(prev);} return out; }
 function stddev(arr,p,means){ const out=[]; for(let i=0;i<arr.length;i++){ if(i<p-1||means[i]==null){out.push(null);continue;} let s=0; for(let j=i-p+1;j<=i;j++) s+=Math.pow(arr[j]-means[i],2); out.push(Math.sqrt(s/p));} return out; }
@@ -359,7 +344,7 @@ function drawCandles(){
       ctx.stroke();
     });
     const lastMid=mid[mid.length-1], lastSd=sd[sd.length-1];
-    document.getElementById('bollOvl').innerHTML = `BOLL:(20,2) <span style="color:#f0b90b;">UP: ${(lastMid+2*lastSd).toFixed(2)}</span> <span style="color:#e879f9;">MB: ${lastMid.toFixed(2)}</span> <span style="color:#a78bfa;">DN: ${(lastMid-2*lastSd).toFixed(2)}</span>`;
+    document.getElementById('bollOvl').innerHTML = `BOLL:(20,2) <span style="color:#f0b90b;">UP: ${fmtLo(lastMid+2*lastSd,2)}</span> <span style="color:#e879f9;">MB: ${fmtLo(lastMid,2)}</span> <span style="color:#a78bfa;">DN: ${fmtLo(lastMid-2*lastSd,2)}</span>`;
   } else { document.getElementById('bollOvl').innerHTML=''; }
 
   const tag=document.getElementById('priceTag');
@@ -384,7 +369,7 @@ function updatePanels(){
     const maxV=Math.max(...m.hist.filter(isFinite).map(Math.abs))||1;
     const bw=w/m.hist.length;
     m.hist.forEach((v,i)=>{ if(!isFinite(v)) return; ctx.fillStyle= v>=0?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=Math.abs(v)/maxV*(h/2-4); const yc=h/2; ctx.fillRect(i*bw,v>=0?yc-bh:yc,Math.max(1,bw*0.6),bh); });
-    document.getElementById('macdOvl').innerHTML = `DIF: ${m.dif[m.dif.length-1].toFixed(2)} <span style="color:#a78bfa;">DEA: ${m.dea[m.dea.length-1].toFixed(2)}</span> <span style="color:#f0b90b;">MACD: ${m.hist[m.hist.length-1].toFixed(2)}</span>`;
+    document.getElementById('macdOvl').innerHTML = `DIF: ${fmtLo(m.dif[m.dif.length-1],2)} <span style="color:#a78bfa;">DEA: ${fmtLo(m.dea[m.dea.length-1],2)}</span> <span style="color:#f0b90b;">MACD: ${fmtLo(m.hist[m.hist.length-1],2)}</span>`;
   }
   if(state.indicators.VOL){
     const canvas=document.getElementById('chartVOL'); const ctx=canvas.getContext('2d');
@@ -393,22 +378,25 @@ function updatePanels(){
     const vols=c.map(x=>x.volume); const maxV=Math.max(...vols)||1; const bw=w/vols.length;
     c.forEach((cd,i)=>{ ctx.fillStyle= cd.close>=cd.open?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=cd.volume/maxV*h; ctx.fillRect(i*bw,h-bh,Math.max(1,bw*0.6),bh); });
     const ma5=sma(vols,5), ma10=sma(vols,10);
-    document.getElementById('volOvl').innerHTML = `VOL: ${vols[vols.length-1].toFixed(0)} <span style="color:#f0b90b;">MA(5): ${(ma5[ma5.length-1]||0).toFixed(0)}</span> <span style="color:#a78bfa;">MA(10): ${(ma10[ma10.length-1]||0).toFixed(0)}</span>`;
+    const cfgVol=ASSETS[state.asset];
+    const volBaseUnit = vols[vols.length-1]/200;
+    const volQuoteUnit = volBaseUnit*state.live;
+    document.getElementById('volOvl').innerHTML = `VOL(${cfgVol.baseSymbol}): ${fmtLo(volBaseUnit,5)} <span style="color:#f0b90b;">VOL(${cfgVol.quote}): ${fmtCompact(volQuoteUnit)}</span> <span style="color:#e879f9;">MA(5): ${fmtLo((ma5[ma5.length-1]||0)/200,5)}</span> <span style="color:#a78bfa;">MA(10): ${fmtLo((ma10[ma10.length-1]||0)/200,5)}</span>`;
   }
   if(state.indicators.RSI){
     const r6=rsiSeries(closes,6), r12=rsiSeries(closes,12), r24=rsiSeries(closes,24);
     drawLineChart('chartRSI',[r6,r12,r24],['#f0b90b','#e879f9','#a78bfa'],{fixedRange:[0,100]});
-    document.getElementById('rsiOvl').innerHTML = `<span style="color:#f0b90b;">RSI(6): ${r6[r6.length-1].toFixed(2)}</span> <span style="color:#e879f9;">RSI(12): ${r12[r12.length-1].toFixed(2)}</span> <span style="color:#a78bfa;">RSI(24): ${r24[r24.length-1].toFixed(2)}</span>`;
+    document.getElementById('rsiOvl').innerHTML = `<span style="color:#f0b90b;">RSI(6): ${fmtLo(r6[r6.length-1],2)}</span> <span style="color:#e879f9;">RSI(12): ${fmtLo(r12[r12.length-1],2)}</span> <span style="color:#a78bfa;">RSI(24): ${fmtLo(r24[r24.length-1],2)}</span>`;
   }
   if(state.indicators.KDJ){
     const kdj=kdjSeries(c);
     drawLineChart('chartKDJ',[kdj.k,kdj.d,kdj.j],['#f0b90b','#e879f9','#a78bfa']);
-    document.getElementById('kdjOvl').innerHTML = `<span style="color:#f0b90b;">K: ${kdj.k[kdj.k.length-1].toFixed(2)}</span> <span style="color:#e879f9;">D: ${kdj.d[kdj.d.length-1].toFixed(2)}</span> <span style="color:#a78bfa;">J: ${kdj.j[kdj.j.length-1].toFixed(2)}</span>`;
+    document.getElementById('kdjOvl').innerHTML = `<span style="color:#f0b90b;">K: ${fmtLo(kdj.k[kdj.k.length-1],2)}</span> <span style="color:#e879f9;">D: ${fmtLo(kdj.d[kdj.d.length-1],2)}</span> <span style="color:#a78bfa;">J: ${fmtLo(kdj.j[kdj.j.length-1],2)}</span>`;
   }
   if(state.indicators.STOCHRSI){
     const sr=stochRsiSeries(closes);
     drawLineChart('chartSTOCH',[sr.k,sr.d],['#f0b90b','#a78bfa'],{fixedRange:[0,100]});
-    document.getElementById('stochOvl').innerHTML = `<span style="color:#f0b90b;">STOCHRSI K: ${sr.k[sr.k.length-1].toFixed(2)}</span> <span style="color:#a78bfa;">STOCHRSI D: ${sr.d[sr.d.length-1].toFixed(2)}</span>`;
+    document.getElementById('stochOvl').innerHTML = `<span style="color:#f0b90b;">STOCHRSI: ${fmtLo(sr.k[sr.k.length-1],2)}</span> <span style="color:#a78bfa;">STOCHRSI: ${fmtLo(sr.d[sr.d.length-1],2)}</span>`;
   }
 }
 
@@ -437,8 +425,25 @@ function computeSignal(){
   return {dir,bias,biasClass,icon,score,vol,rsiV,checklist,trend:trendUp?'BULLISH':trendDown?'BEARISH':'SIDEWAYS'};
 }
 
-function fmt(v){ return v.toFixed(ASSETS[state.asset].decimals); }
-function fmtInt(v){ return v.toLocaleString(undefined,{maximumFractionDigits:2}); }
+function fmtLo(v, decimals){
+  const num = Number(v);
+  const fixed = (isFinite(num)?num:0).toFixed(decimals);
+  const neg = fixed.startsWith('-');
+  const abs = neg ? fixed.slice(1) : fixed;
+  const parts = abs.split('.');
+  const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const decPart = parts[1];
+  return (neg?'-':'') + intPart + (decPart!==undefined ? ','+decPart : '');
+}
+function fmtCompact(v){
+  const num=Number(v)||0;
+  if (Math.abs(num)>=1e9) return fmtLo(num/1e9,2)+'B';
+  if (Math.abs(num)>=1e6) return fmtLo(num/1e6,2)+'M';
+  if (Math.abs(num)>=1e3) return fmtLo(num/1e3,2)+'K';
+  return fmtLo(num,2);
+}
+function fmt(v){ return fmtLo(v, ASSETS[state.asset].decimals); }
+function fmtInt(v){ return fmtLo(v, 2); }
 
 function renderAiSheet(){
   const s=computeSignal();
@@ -457,67 +462,169 @@ function renderAiSheet(){
   ].join('\n');
 }
 
-function updateReturns(){
-  const rnd=seededRand(state.asset.length*17+7);
-  const vals=[rnd()*4-2, rnd()*8-4, rnd()*12-5, rnd()*30-15, rnd()*25-12, rnd()*60-20];
+async function updateReturns(){
+  const cfg=ASSETS[state.asset];
   const ids=['r1d','r7d','r30d','r90d','r180d','r1y'];
-  ids.forEach((id,i)=>{
-    const el=document.getElementById(id); const v=vals[i];
-    el.textContent=(v>=0?'+':'')+v.toFixed(2)+'%'; el.style.color=v>=0?'#0ecb81':'#f6465d';
-  });
+  const lookbacks=[1,7,30,90,180,365];
+  const mySeq = state.loadSeq;
+  try{
+    const res=await fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=1d&limit=400`);
+    const raw=await res.json();
+    if(mySeq!==state.loadSeq) return;
+    const closes=raw.map(k=>+k[4]);
+    const last=closes[closes.length-1];
+    ids.forEach((id,i)=>{
+      const el=document.getElementById(id);
+      const n=lookbacks[i];
+      const idx=closes.length-1-n;
+      if(idx<0 || last==null){ el.textContent='--'; el.style.color='var(--muted)'; return; }
+      const past=closes[idx];
+      const v=((last-past)/past)*100;
+      el.textContent=(v>=0?'+':'')+fmtLo(v,2)+'%'; el.style.color=v>=0?'#0ecb81':'#f6465d';
+    });
+  }catch(e){
+    ids.forEach(id=>{ const el=document.getElementById(id); el.textContent='--'; el.style.color='var(--muted)'; });
+  }
 }
 
-function buildOrderBook(){
+function renderOrderBook(data){
   const cfg=ASSETS[state.asset];
-  const rnd=seededRand(state.asset.length*31+state.tickCount);
-  const rows=[]; let bid=state.live, ask=state.live+state.live*0.00002;
-  for(let i=0;i<26;i++){
-    bid -= state.live*0.00001*(1+rnd()); ask += state.live*0.00001*(1+rnd());
-    rows.push({amtBid:(rnd()*0.3).toFixed(5), bid:bid.toFixed(cfg.decimals), ask:ask.toFixed(cfg.decimals), amtAsk:(rnd()*1.2).toFixed(5)});
-  }
-  document.getElementById('obTable').innerHTML = rows.map(r=>{
-    const bidW = Math.min(90, parseFloat(r.amtBid)*200);
-    const askW = Math.min(90, parseFloat(r.amtAsk)*60);
-    return `<div class="ob-row mono">
+  const bids=(data.bids||[]).map(([p,q])=>({price:+p,qty:+q})).filter(x=>x.qty>0);
+  const asks=(data.asks||[]).map(([p,q])=>({price:+p,qty:+q})).filter(x=>x.qty>0);
+  if(!bids.length || !asks.length) return;
+  const maxBidQty=Math.max(...bids.map(b=>b.qty),0.00001);
+  const maxAskQty=Math.max(...asks.map(a=>a.qty),0.00001);
+  const n=Math.min(20,bids.length,asks.length);
+  let rowsHtml='';
+  for(let i=0;i<n;i++){
+    const b=bids[i], a=asks[i];
+    const bidW=Math.min(90,(b.qty/maxBidQty)*90);
+    const askW=Math.min(90,(a.qty/maxAskQty)*90);
+    rowsHtml += `<div class="ob-row mono">
       <div class="ob-bg-bid" style="width:${bidW}%;"></div>
       <div class="ob-bg-ask" style="width:${askW}%;"></div>
-      <span class="amt-bid">${r.amtBid}</span>
-      <span class="prices"><span style="color:var(--up);">${r.bid}</span><span style="color:var(--down);">${r.ask}</span></span>
-      <span class="amt-ask">${r.amtAsk}</span>
+      <span class="amt-bid">${fmtLo(b.qty,5)}</span>
+      <span class="prices"><span style="color:var(--up);">${fmtLo(b.price,cfg.decimals)}</span><span style="color:var(--down);">${fmtLo(a.price,cfg.decimals)}</span></span>
+      <span class="amt-ask">${fmtLo(a.qty,5)}</span>
     </div>`;
-  }).join('');
-  const buyPct = 5+rnd()*20;
-  document.getElementById('ratioBuy').textContent=buyPct.toFixed(2)+'%';
-  document.getElementById('ratioSell').textContent=(100-buyPct).toFixed(2)+'%';
+  }
+  document.getElementById('obTable').innerHTML = rowsHtml;
+  const totalBid=bids.reduce((s,b)=>s+b.qty,0), totalAsk=asks.reduce((s,a)=>s+a.qty,0);
+  const totalAll=totalBid+totalAsk||1;
+  const buyPct=totalBid/totalAll*100;
+  document.getElementById('ratioBuy').textContent=fmtLo(buyPct,2)+'%';
+  document.getElementById('ratioSell').textContent=fmtLo(100-buyPct,2)+'%';
   document.getElementById('ratioBar').style.width=buyPct+'%';
 }
 
-function refreshHeader(){
+async function fetchOrderBookSnapshot(){
   const cfg=ASSETS[state.asset];
+  const mySeq = state.loadSeq;
+  try{
+    const res=await fetch(`https://api.binance.com/api/v3/depth?symbol=${cfg.symbol}&limit=20`);
+    const data=await res.json();
+    if(mySeq!==state.loadSeq) return;
+    renderOrderBook(data);
+  }catch(e){ /* WS may still fill this in once connected */ }
+}
+
+function refreshHeader(){
   document.getElementById('bigPrice').textContent=fmt(state.live);
   document.getElementById('bigPrice').style.color = state.chg>=0? '#0ecb81':'#f6465d';
-  document.getElementById('priceSub').innerHTML = `$${fmt(state.live)} <span style="color:${state.chg>=0?'#0ecb81':'#f6465d'};">${state.chg>=0?'+':''}${state.chg.toFixed(2)}%</span>`;
-  document.getElementById('hi24').textContent=fmt(Math.max(...state.candles.map(c=>c.high)));
-  document.getElementById('lo24').textContent=fmt(Math.min(...state.candles.map(c=>c.low)));
-  const totalVol = state.candles.reduce((a,c)=>a+c.volume,0);
-  document.getElementById('volBase').textContent=fmtInt(totalVol/10);
-  document.getElementById('volQuote').textContent=fmtInt(totalVol*state.live/1e6)+'M';
+  document.getElementById('priceSub').innerHTML = `$${fmt(state.live)} <span style="color:${state.chg>=0?'#0ecb81':'#f6465d'};">${state.chg>=0?'+':''}${fmtLo(state.chg,2)}%</span>`;
+  document.getElementById('hi24').textContent=fmt(state.hi24);
+  document.getElementById('lo24').textContent=fmt(state.lo24);
+  document.getElementById('volBase').textContent=fmtLo(state.volBaseLive,2);
+  document.getElementById('volQuote').textContent=fmtCompact(state.volQuoteLive);
 }
 
-function tick(){
+function closeWs(){
+  if(ws){ try{ ws.onclose=null; ws.onerror=null; ws.onmessage=null; ws.close(); }catch(e){} ws=null; }
+}
+
+function connectStream(){
+  closeWs();
   const cfg=ASSETS[state.asset];
-  const rnd=Math.random()-0.5;
-  state.live = state.live*(1+rnd*cfg.vol*0.0005);
-  state.chg = ((state.live-cfg.base)/cfg.base*100);
-  refreshHeader();
-  state.tickCount++;
-  if(state.tickCount%4===0){ drawCandles(); updatePanels(); buildOrderBook(); }
+  const sym=cfg.symbol.toLowerCase();
+  const interval=TF_BINANCE[state.tf]||'5m';
+  const streams=`${sym}@ticker/${sym}@kline_${interval}/${sym}@depth20@100ms`;
+  const mySeq = state.loadSeq;
+  let sock;
+  try{ sock = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`); }
+  catch(e){ return; }
+  ws = sock;
+  sock.onmessage = (ev)=>{
+    if(mySeq!==state.loadSeq) return;
+    let msg;
+    try{ msg=JSON.parse(ev.data); }catch(e){ return; }
+    const streamName=msg.stream||''; const data=msg.data;
+    if(!data) return;
+    if(streamName.indexOf('@ticker')>=0){
+      state.live=+data.c; state.chg=+data.P;
+      state.hi24=+data.h; state.lo24=+data.l;
+      state.volBaseLive=+data.v; state.volQuoteLive=+data.q;
+      refreshHeader();
+    } else if(streamName.indexOf('@kline_')>=0){
+      const k=data.k;
+      const cndl={open:+k.o, high:+k.h, low:+k.l, close:+k.c, volume:+k.v};
+      if(state.candles.length){
+        state.candles[state.candles.length-1]=cndl;
+        if(k.x){ state.candles.push(cndl); if(state.candles.length>150) state.candles.shift(); }
+      }
+      drawCandles(); updatePanels();
+    } else if(streamName.indexOf('@depth20')>=0){
+      renderOrderBook(data);
+    }
+  };
+  sock.onclose = ()=>{ if(mySeq===state.loadSeq){ setTimeout(()=>{ if(mySeq===state.loadSeq) connectStream(); }, 3000); } };
+  sock.onerror = ()=>{ try{ sock.close(); }catch(e){} };
 }
 
-function loadAssetTf(){
-  state.candles = genCandles(state.asset, state.tf);
-  state.live = state.candles[state.candles.length-1].close;
-  drawCandles(); updatePanels(); updateReturns(); buildOrderBook(); refreshHeader();
+function startPollingFallback(){
+  clearInterval(window._pollT);
+  window._pollT=setInterval(async ()=>{
+    if(ws && ws.readyState===WebSocket.OPEN) return;
+    const mySeq = state.loadSeq;
+    const cfg=ASSETS[state.asset];
+    try{
+      const res=await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${cfg.symbol}`);
+      const d=await res.json();
+      if(mySeq!==state.loadSeq) return;
+      state.live=+d.lastPrice; state.chg=+d.priceChangePercent;
+      state.hi24=+d.highPrice; state.lo24=+d.lowPrice;
+      state.volBaseLive=+d.volume; state.volQuoteLive=+d.quoteVolume;
+      refreshHeader();
+    }catch(e){}
+  }, 5000);
+}
+
+async function loadAssetTf(){
+  const mySeq = ++state.loadSeq;
+  const cfg=ASSETS[state.asset];
+  const interval=TF_BINANCE[state.tf]||'5m';
+  closeWs();
+  try{
+    const [klinesRes, tickerRes] = await Promise.all([
+      fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=${interval}&limit=150`),
+      fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${cfg.symbol}`)
+    ]);
+    if(mySeq!==state.loadSeq) return;
+    const rawK = await klinesRes.json();
+    const ticker = await tickerRes.json();
+    if(mySeq!==state.loadSeq) return;
+    if(!Array.isArray(rawK) || rawK.length===0 || ticker.code){ throw new Error('bad response'); }
+    state.candles = rawK.map(k=>({open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    state.live=+ticker.lastPrice; state.chg=+ticker.priceChangePercent;
+    state.hi24=+ticker.highPrice; state.lo24=+ticker.lowPrice;
+    state.volBaseLive=+ticker.volume; state.volQuoteLive=+ticker.quoteVolume;
+    drawCandles(); updatePanels(); refreshHeader();
+    fetchOrderBookSnapshot();
+    updateReturns();
+    connectStream();
+  }catch(e){
+    console.error('loadAssetTf error', e);
+    showToast('ບໍ່ສາມາດເຊື່ອມຕໍ່ຂໍ້ມູນຕະຫຼາດແທ້ໄດ້ (Binance) — ກວດອິນເຕີເນັດ ຫຼື API ອາດຖືກບລັອກໃນເຂດຂອງທ່ານ');
+  }
 }
 
 document.getElementById('assetSel').addEventListener('change', e=>{ state.asset=e.target.value; loadAssetTf(); });
@@ -548,7 +655,7 @@ document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
 document.getElementById('sheetClose').addEventListener('click', closeSheet);
 
 loadAssetTf();
-setInterval(tick, 1000);
+startPollingFallback();
 window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
 </script>
 </body>
