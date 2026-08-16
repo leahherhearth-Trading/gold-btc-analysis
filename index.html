@@ -46,6 +46,29 @@
   #chartMain{height:230px;}
   #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:70px;}
   .pricetag{position:absolute;right:0;background:var(--yellow);color:#000;font-size:10px;font-weight:700;padding:1px 4px;border-radius:2px 0 0 2px;z-index:4;}
+  .live-jump-btn{position:absolute;right:8px;bottom:8px;background:rgba(240,185,11,0.95);color:#000;font-size:11px;font-weight:700;padding:5px 10px;border:none;border-radius:14px;z-index:6;display:none;}
+  .live-jump-btn.show{display:block;}
+  #chartMain{touch-action:none;}
+  .toolicon.active{color:var(--yellow);}
+
+  /* Fullscreen chart mode — toggled by the ⛶ icon: hide everything except the chart itself */
+  .frame.fullscreen .demo-banner,
+  .frame.fullscreen .tabs,
+  .frame.fullscreen .indicator-row,
+  .frame.fullscreen .returns-row,
+  .frame.fullscreen .ob-tabs,
+  .frame.fullscreen .ob-ratio,
+  .frame.fullscreen .ob-header,
+  .frame.fullscreen .ob-table,
+  .frame.fullscreen .bottombar,
+  .frame.fullscreen div[style*="height:70px"]{ display:none; }
+  .frame.fullscreen{ max-width:100%; }
+  .frame.fullscreen #chartMain{ height:min(60vh,600px); }
+  .frame.fullscreen #chartMACD,
+  .frame.fullscreen #chartVOL,
+  .frame.fullscreen #chartRSI,
+  .frame.fullscreen #chartKDJ,
+  .frame.fullscreen #chartSTOCH{ height:min(14vh,160px); }
 
   .indicator-row{display:flex;gap:14px;padding:6px 10px;overflow-x:auto;border-bottom:1px solid var(--border);}
   .indicator-row button{background:none;border:none;color:var(--muted);font-size:11.5px;white-space:nowrap;padding:2px 0;}
@@ -92,6 +115,9 @@
   .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;}
   .dot.pass{background:var(--up);} .dot.fail{background:var(--down);}
   .closebtn{position:absolute;right:14px;top:12px;color:var(--muted);font-size:16px;background:none;border:none;}
+  .ind-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .ind-grid button{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:12px;padding:9px 4px;border-radius:6px;}
+  .ind-grid button.active{border-color:var(--yellow);color:var(--yellow);}
 
   .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);background:#2b2f36;color:#fff;padding:9px 16px;
     border-radius:8px;font-size:12px;z-index:30;opacity:0;transition:opacity .25s;max-width:88%;text-align:center;}
@@ -169,13 +195,14 @@
     <button class="tf-pill" data-tf="1H">1ຊົ່ວໂມງ</button>
     <button class="tf-pill" data-tf="4H">4ຊົ່ວໂມງ</button>
     <button class="tf-pill" data-tf="1D">1ວັນ</button>
-    <span class="toolicon">⛶</span><span class="toolicon">☰</span><span class="toolicon">▦</span>
+    <span class="toolicon" id="fsToggleBtn" title="ຂະຫຍາຍເຕັມຈໍ">⛶</span><span class="toolicon" id="chartTypeBtn" title="ປະເພດກາບ">☰</span><span class="toolicon" id="indicatorMenuBtn" title="ຕົວຊີ້ວັດ">▦</span>
   </div>
 
   <div class="chartwrap">
     <div class="ovl" id="bollOvl">BOLL:(20,2) <span style="color:#f0b90b;">UP: --</span> <span style="color:#e879f9;">MB: --</span> <span style="color:#a78bfa;">DN: --</span></div>
     <canvas id="chartMain" height="230"></canvas>
     <div class="pricetag mono" id="priceTag" style="top:40%;">2415.31</div>
+    <button id="liveJumpBtn" class="live-jump-btn">⏵ ລ່າສຸດ</button>
   </div>
 
   <div class="chartwrap" id="panelMACD">
@@ -254,6 +281,13 @@
     <div style="margin-top:8px;" id="checklist"></div>
     <div class="narrative" id="aiNarrative"></div>
   </div>
+
+  <div class="sheet" id="indSheet">
+    <button class="closebtn" id="indSheetClose">✕</button>
+    <h4>ຕົວຊີ້ວັດ (Indicators)</h4>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">ກົດເພື່ອເປີດ/ປິດຕົວຊີ້ວັດເທິງກາບ. ຕົວທີ່ມີເຄື່ອງໝາຍ ★ ແມ່ນວາດຢູ່ໃນສະບັບທົດລອງນີ້ແລ້ວ (ຕົວອື່ນຈະເພີ່ມໃນເວີຊັນຕໍ່ໄປ).</div>
+    <div class="ind-grid" id="indGrid"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -266,8 +300,61 @@ const ASSETS = {
 const TF_SECONDS = {"1S":1,"1M":60,"15M":900,"1H":3600,"4H":14400,"1D":86400,"5M":300};
 const TF_BINANCE = {"1S":"1s","1M":"1m","15M":"15m","1H":"1h","4H":"4h","1D":"1d","5M":"5m"};
 
-let state = { asset:"XAUUSD", tf:"5M", candles:[], live:0, chg:0, hi24:0, lo24:0, volBaseLive:0, volQuoteLive:0, loadSeq:0, indicators:{MA:false,EMA:false,BOLL:true,SAR:false,AVL:false,SUPER:false,VOL:true,MACD:true,RSI:true,KDJ:false,OBV:false,WR:false,STOCHRSI:true,ATR:false} };
+let state = { asset:"XAUUSD", tf:"5M", candles:[], live:0, chg:0, hi24:0, lo24:0, volBaseLive:0, volQuoteLive:0, loadSeq:0, view:{start:0,count:60}, followLive:true, chartType:"candle", indicators:{MA:false,EMA:false,BOLL:true,SAR:false,AVL:false,SUPER:false,VOL:true,MACD:true,RSI:true,KDJ:false,OBV:false,WR:false,STOCHRSI:true,ATR:false} };
+const IMPLEMENTED_INDICATORS = {BOLL:1,VOL:1,MACD:1,RSI:1,KDJ:1,STOCHRSI:1}; // indicators actually drawn on the chart in this preview build
 let ws=null;
+
+// ---- Pan/Zoom view window ----
+const MIN_VISIBLE=15;      // most zoomed-in (fewest candles on screen)
+const DEFAULT_VISIBLE=60;  // default zoom level when a timeframe first loads / jump-to-live
+let noMoreHistory=false;   // true once Binance returns no earlier candles for this asset/tf
+let loadingMoreHistory=false;
+
+function sliceView(arr){ return arr.slice(state.view.start, state.view.start+state.view.count); }
+function clampView(){
+  const total=state.candles.length;
+  state.view.count=Math.max(MIN_VISIBLE, Math.min(state.view.count, Math.max(total,MIN_VISIBLE)));
+  const maxStart=Math.max(0, total-state.view.count);
+  state.view.start=Math.max(0, Math.min(state.view.start, maxStart));
+  state.followLive = (state.view.start+state.view.count)>=total;
+}
+function resetViewToLive(){
+  const total=state.candles.length;
+  state.view.count=Math.min(DEFAULT_VISIBLE, Math.max(total,1));
+  state.view.start=Math.max(0, total-state.view.count);
+  state.followLive=true;
+  updateLiveJumpBtn();
+}
+function updateLiveJumpBtn(){
+  const btn=document.getElementById('liveJumpBtn');
+  if(!btn) return;
+  btn.classList.toggle('show', !state.followLive);
+}
+async function maybeLoadMoreHistory(){
+  if(loadingMoreHistory || noMoreHistory) return;
+  if(state.view.start>15) return;
+  if(!state.candles.length || state.candles[0].time==null) return;
+  loadingMoreHistory=true;
+  const mySeq=state.loadSeq;
+  const cfg=ASSETS[state.asset];
+  const interval=TF_BINANCE[state.tf]||'5m';
+  const oldestTime=state.candles[0].time;
+  try{
+    const res=await fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=${interval}&limit=200&endTime=${oldestTime-1}`);
+    const rawK=await res.json();
+    if(mySeq!==state.loadSeq){ loadingMoreHistory=false; return; }
+    if(Array.isArray(rawK) && rawK.length){
+      const older=rawK.map(k=>({open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],time:+k[0]}));
+      state.candles=older.concat(state.candles);
+      state.view.start+=older.length;
+      clampView();
+      drawCandles(); updatePanels();
+    } else {
+      noMoreHistory=true;
+    }
+  }catch(e){ /* silent — user just can't scroll further back right now */ }
+  loadingMoreHistory=false;
+}
 
 function seededRand(seed){ let s = seed % 2147483647; if (s<=0) s+=2147483646;
   return function(){ s = (s*16807)%2147483647; return (s-1)/2147483646; }; }
@@ -352,8 +439,10 @@ function drawCandles(){
   const canvas=document.getElementById('chartMain');
   const {ctx,w,h} = setupCanvas(canvas);
   ctx.clearRect(0,0,w,h);
-  const c=state.candles;
-  const closes=c.map(x=>x.close);
+  const cAll=state.candles;
+  const c=sliceView(cAll);
+  if(!c.length) return;
+  const closesAll=cAll.map(x=>x.close);
   const highs=c.map(x=>x.high), lows=c.map(x=>x.low);
   const maxP=Math.max(...highs), minP=Math.min(...lows);
   const pad=(maxP-minP)*0.08||1; const yMax=maxP+pad, yMin=minP-pad;
@@ -363,16 +452,29 @@ function drawCandles(){
   ctx.strokeStyle='#161a1e';
   for(let i=0;i<5;i++){ const yy=h/5*i; ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(w,yy); ctx.stroke(); }
 
-  c.forEach((cd,i)=>{
-    const x=i*bw+bw/2; const up=cd.close>=cd.open;
-    ctx.strokeStyle= up? '#0ecb81':'#f6465d'; ctx.fillStyle= up? '#0ecb81':'#f6465d';
-    ctx.beginPath(); ctx.moveTo(x,y(cd.high)); ctx.lineTo(x,y(cd.low)); ctx.stroke();
-    const top=y(Math.max(cd.open,cd.close)), bot=y(Math.min(cd.open,cd.close));
-    ctx.fillRect(x-bw*0.32, top, bw*0.64, Math.max(1,bot-top));
-  });
+  if(state.chartType==='line'){
+    const grad=ctx.createLinearGradient(0,0,0,h);
+    grad.addColorStop(0,'rgba(240,185,11,0.35)'); grad.addColorStop(1,'rgba(240,185,11,0)');
+    ctx.beginPath();
+    c.forEach((cd,i)=>{ const x=i*bw+bw/2; const yy=y(cd.close); if(i===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy); });
+    ctx.lineTo((c.length-1)*bw+bw/2, h); ctx.lineTo(bw/2, h); ctx.closePath();
+    ctx.fillStyle=grad; ctx.fill();
+    ctx.beginPath(); ctx.strokeStyle='#f0b90b'; ctx.lineWidth=1.6;
+    c.forEach((cd,i)=>{ const x=i*bw+bw/2; const yy=y(cd.close); if(i===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy); });
+    ctx.stroke();
+  } else {
+    c.forEach((cd,i)=>{
+      const x=i*bw+bw/2; const up=cd.close>=cd.open;
+      ctx.strokeStyle= up? '#0ecb81':'#f6465d'; ctx.fillStyle= up? '#0ecb81':'#f6465d';
+      ctx.beginPath(); ctx.moveTo(x,y(cd.high)); ctx.lineTo(x,y(cd.low)); ctx.stroke();
+      const top=y(Math.max(cd.open,cd.close)), bot=y(Math.min(cd.open,cd.close));
+      ctx.fillRect(x-bw*0.32, top, bw*0.64, Math.max(1,bot-top));
+    });
+  }
 
   if(state.indicators.BOLL){
-    const mid=sma(closes,20); const sd=stddev(closes,20,mid);
+    const midAll=sma(closesAll,20); const sdAll=stddev(closesAll,20,midAll);
+    const mid=sliceView(midAll), sd=sliceView(sdAll);
     const up=mid.map((m,i)=>m==null?null:m+2*sd[i]);
     const dn=mid.map((m,i)=>m==null?null:m-2*sd[i]);
     [[up,'#f0b90b'],[mid,'#e879f9'],[dn,'#a78bfa']].forEach(([series,color])=>{
@@ -380,18 +482,25 @@ function drawCandles(){
       series.forEach((v,i)=>{ if(v==null) return; const x=i*bw+bw/2; if(!started){ctx.moveTo(x,y(v));started=true;} else ctx.lineTo(x,y(v)); });
       ctx.stroke();
     });
-    const lastMid=mid[mid.length-1], lastSd=sd[sd.length-1];
-    document.getElementById('bollOvl').innerHTML = `BOLL:(20,2) <span style="color:#f0b90b;">UP: ${fmtLo(lastMid+2*lastSd,2)}</span> <span style="color:#e879f9;">MB: ${fmtLo(lastMid,2)}</span> <span style="color:#a78bfa;">DN: ${fmtLo(lastMid-2*lastSd,2)}</span>`;
+    const lastMidAll=midAll[midAll.length-1], lastSdAll=sdAll[sdAll.length-1];
+    document.getElementById('bollOvl').innerHTML = `BOLL:(20,2) <span style="color:#f0b90b;">UP: ${fmtLo(lastMidAll+2*lastSdAll,2)}</span> <span style="color:#e879f9;">MB: ${fmtLo(lastMidAll,2)}</span> <span style="color:#a78bfa;">DN: ${fmtLo(lastMidAll-2*lastSdAll,2)}</span>`;
   } else { document.getElementById('bollOvl').innerHTML=''; }
 
   const tag=document.getElementById('priceTag');
-  const lastY=y(closes[closes.length-1]);
-  tag.style.top=Math.max(0,Math.min(h-14,lastY-7))+'px';
-  tag.textContent=fmt(closes[closes.length-1]);
+  const showTag = state.followLive;
+  tag.style.display = showTag? 'block':'none';
+  if(showTag){
+    const lastY=y(c[c.length-1].close);
+    tag.style.top=Math.max(0,Math.min(h-14,lastY-7))+'px';
+    tag.textContent=fmt(c[c.length-1].close);
+  }
+  updateLiveJumpBtn();
 }
 
 function updatePanels(){
-  const c=state.candles; const closes=c.map(x=>x.close);
+  const cAll=state.candles; const closesAll=cAll.map(x=>x.close);
+  const c=sliceView(cAll);
+  if(!c.length) return;
   document.getElementById('panelMACD').style.display = state.indicators.MACD?'block':'none';
   document.getElementById('panelVOL').style.display = state.indicators.VOL?'block':'none';
   document.getElementById('panelRSI').style.display = state.indicators.RSI?'block':'none';
@@ -399,41 +508,42 @@ function updatePanels(){
   document.getElementById('panelSTOCHRSI').style.display = state.indicators.STOCHRSI?'block':'none';
 
   if(state.indicators.MACD){
-    const m = macdSeries(closes);
-    drawLineChart('chartMACD',[m.dif,m.dea],['#f0b90b','#a78bfa']);
+    const mAll = macdSeries(closesAll);
+    const dif=sliceView(mAll.dif), dea=sliceView(mAll.dea), hist=sliceView(mAll.hist);
+    drawLineChart('chartMACD',[dif,dea],['#f0b90b','#a78bfa']);
     const canvas=document.getElementById('chartMACD'); const ctx=canvas.getContext('2d');
     const w=canvas.width, h=canvas.height;
-    const maxV=Math.max(...m.hist.filter(isFinite).map(Math.abs))||1;
-    const bw=w/m.hist.length;
-    m.hist.forEach((v,i)=>{ if(!isFinite(v)) return; ctx.fillStyle= v>=0?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=Math.abs(v)/maxV*(h/2-4); const yc=h/2; ctx.fillRect(i*bw,v>=0?yc-bh:yc,Math.max(1,bw*0.6),bh); });
-    document.getElementById('macdOvl').innerHTML = `DIF: ${fmtLo(m.dif[m.dif.length-1],2)} <span style="color:#a78bfa;">DEA: ${fmtLo(m.dea[m.dea.length-1],2)}</span> <span style="color:#f0b90b;">MACD: ${fmtLo(m.hist[m.hist.length-1],2)}</span>`;
+    const maxV=Math.max(...hist.filter(isFinite).map(Math.abs))||1;
+    const bw=w/hist.length;
+    hist.forEach((v,i)=>{ if(!isFinite(v)) return; ctx.fillStyle= v>=0?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=Math.abs(v)/maxV*(h/2-4); const yc=h/2; ctx.fillRect(i*bw,v>=0?yc-bh:yc,Math.max(1,bw*0.6),bh); });
+    document.getElementById('macdOvl').innerHTML = `DIF: ${fmtLo(mAll.dif[mAll.dif.length-1],2)} <span style="color:#a78bfa;">DEA: ${fmtLo(mAll.dea[mAll.dea.length-1],2)}</span> <span style="color:#f0b90b;">MACD: ${fmtLo(mAll.hist[mAll.hist.length-1],2)}</span>`;
   }
   if(state.indicators.VOL){
     const canvas=document.getElementById('chartVOL');
     const {ctx,w,h} = setupCanvas(canvas);
     ctx.clearRect(0,0,w,h);
-    const vols=c.map(x=>x.volume); const maxV=Math.max(...vols)||1; const bw=w/vols.length;
+    const vols=c.map(x=>x.volume); const volsAll=cAll.map(x=>x.volume); const maxV=Math.max(...vols)||1; const bw=w/vols.length;
     c.forEach((cd,i)=>{ ctx.fillStyle= cd.close>=cd.open?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=cd.volume/maxV*h; ctx.fillRect(i*bw,h-bh,Math.max(1,bw*0.6),bh); });
-    const ma5=sma(vols,5), ma10=sma(vols,10);
+    const ma5=sma(volsAll,5), ma10=sma(volsAll,10);
     const cfgVol=ASSETS[state.asset];
-    const volBaseUnit = vols[vols.length-1]/200;
+    const volBaseUnit = volsAll[volsAll.length-1]/200;
     const volQuoteUnit = volBaseUnit*state.live;
     document.getElementById('volOvl').innerHTML = `VOL(${cfgVol.baseSymbol}): ${fmtLo(volBaseUnit,5)} <span style="color:#f0b90b;">VOL(${cfgVol.quote}): ${fmtCompact(volQuoteUnit)}</span> <span style="color:#e879f9;">MA(5): ${fmtLo((ma5[ma5.length-1]||0)/200,5)}</span> <span style="color:#a78bfa;">MA(10): ${fmtLo((ma10[ma10.length-1]||0)/200,5)}</span>`;
   }
   if(state.indicators.RSI){
-    const r6=rsiSeries(closes,6), r12=rsiSeries(closes,12), r24=rsiSeries(closes,24);
-    drawLineChart('chartRSI',[r6,r12,r24],['#f0b90b','#e879f9','#a78bfa'],{fixedRange:[0,100]});
-    document.getElementById('rsiOvl').innerHTML = `<span style="color:#f0b90b;">RSI(6): ${fmtLo(r6[r6.length-1],2)}</span> <span style="color:#e879f9;">RSI(12): ${fmtLo(r12[r12.length-1],2)}</span> <span style="color:#a78bfa;">RSI(24): ${fmtLo(r24[r24.length-1],2)}</span>`;
+    const r6All=rsiSeries(closesAll,6), r12All=rsiSeries(closesAll,12), r24All=rsiSeries(closesAll,24);
+    drawLineChart('chartRSI',[sliceView(r6All),sliceView(r12All),sliceView(r24All)],['#f0b90b','#e879f9','#a78bfa'],{fixedRange:[0,100]});
+    document.getElementById('rsiOvl').innerHTML = `<span style="color:#f0b90b;">RSI(6): ${fmtLo(r6All[r6All.length-1],2)}</span> <span style="color:#e879f9;">RSI(12): ${fmtLo(r12All[r12All.length-1],2)}</span> <span style="color:#a78bfa;">RSI(24): ${fmtLo(r24All[r24All.length-1],2)}</span>`;
   }
   if(state.indicators.KDJ){
-    const kdj=kdjSeries(c);
-    drawLineChart('chartKDJ',[kdj.k,kdj.d,kdj.j],['#f0b90b','#e879f9','#a78bfa']);
-    document.getElementById('kdjOvl').innerHTML = `<span style="color:#f0b90b;">K: ${fmtLo(kdj.k[kdj.k.length-1],2)}</span> <span style="color:#e879f9;">D: ${fmtLo(kdj.d[kdj.d.length-1],2)}</span> <span style="color:#a78bfa;">J: ${fmtLo(kdj.j[kdj.j.length-1],2)}</span>`;
+    const kdjAll=kdjSeries(cAll);
+    drawLineChart('chartKDJ',[sliceView(kdjAll.k),sliceView(kdjAll.d),sliceView(kdjAll.j)],['#f0b90b','#e879f9','#a78bfa']);
+    document.getElementById('kdjOvl').innerHTML = `<span style="color:#f0b90b;">K: ${fmtLo(kdjAll.k[kdjAll.k.length-1],2)}</span> <span style="color:#e879f9;">D: ${fmtLo(kdjAll.d[kdjAll.d.length-1],2)}</span> <span style="color:#a78bfa;">J: ${fmtLo(kdjAll.j[kdjAll.j.length-1],2)}</span>`;
   }
   if(state.indicators.STOCHRSI){
-    const sr=stochRsiSeries(closes);
-    drawLineChart('chartSTOCH',[sr.k,sr.d],['#f0b90b','#a78bfa'],{fixedRange:[0,100]});
-    document.getElementById('stochOvl').innerHTML = `<span style="color:#f0b90b;">STOCHRSI: ${fmtLo(sr.k[sr.k.length-1],2)}</span> <span style="color:#a78bfa;">STOCHRSI: ${fmtLo(sr.d[sr.d.length-1],2)}</span>`;
+    const srAll=stochRsiSeries(closesAll);
+    drawLineChart('chartSTOCH',[sliceView(srAll.k),sliceView(srAll.d)],['#f0b90b','#a78bfa'],{fixedRange:[0,100]});
+    document.getElementById('stochOvl').innerHTML = `<span style="color:#f0b90b;">STOCHRSI: ${fmtLo(srAll.k[srAll.k.length-1],2)}</span> <span style="color:#a78bfa;">STOCHRSI: ${fmtLo(srAll.d[srAll.d.length-1],2)}</span>`;
   }
 }
 
@@ -614,10 +724,17 @@ function connectStream(){
       refreshHeader();
     } else if(streamName.indexOf('@kline_')>=0){
       const k=data.k;
-      const cndl={open:+k.o, high:+k.h, low:+k.l, close:+k.c, volume:+k.v};
+      const cndl={open:+k.o, high:+k.h, low:+k.l, close:+k.c, volume:+k.v, time:+k.t};
       if(state.candles.length){
+        const atLiveEdge = (state.view.start+state.view.count)>=state.candles.length;
         state.candles[state.candles.length-1]=cndl;
-        if(k.x){ state.candles.push(cndl); if(state.candles.length>150) state.candles.shift(); }
+        if(k.x){
+          state.candles.push(cndl);
+          const MAX_CANDLES=1000;
+          if(state.candles.length>MAX_CANDLES){ state.candles.shift(); state.view.start=Math.max(0,state.view.start-1); }
+          if(atLiveEdge){ state.view.start=state.candles.length-state.view.count; }
+        }
+        clampView();
       }
       drawCandles(); updatePanels();
     } else if(streamName.indexOf('@depth20')>=0){
@@ -656,7 +773,7 @@ function startPollingFallback(){
       refreshHeader();
       if(Array.isArray(rawK) && rawK.length && state.candles.length){
         rawK.forEach((k,i)=>{
-          const cndl={open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]};
+          const cndl={open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],time:+k[0]};
           const idxFromEnd = rawK.length-1-i;
           const targetIdx = state.candles.length-1-idxFromEnd;
           if(targetIdx>=0 && idxFromEnd===0){ state.candles[state.candles.length-1]=cndl; }
@@ -674,7 +791,7 @@ async function loadAssetTf(){
   closeWs();
   try{
     const [klinesRes, tickerRes] = await Promise.all([
-      fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=${interval}&limit=150`),
+      fetch(`https://api.binance.com/api/v3/klines?symbol=${cfg.symbol}&interval=${interval}&limit=500`),
       fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${cfg.symbol}`)
     ]);
     if(mySeq!==state.loadSeq) return;
@@ -682,7 +799,9 @@ async function loadAssetTf(){
     const ticker = await tickerRes.json();
     if(mySeq!==state.loadSeq) return;
     if(!Array.isArray(rawK) || rawK.length===0 || ticker.code){ throw new Error('bad response'); }
-    state.candles = rawK.map(k=>({open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+    state.candles = rawK.map(k=>({open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],time:+k[0]}));
+    noMoreHistory=false; loadingMoreHistory=false;
+    resetViewToLive();
     state.live=+ticker.lastPrice; state.chg=+ticker.priceChangePercent;
     state.hi24=+ticker.highPrice; state.lo24=+ticker.lowPrice;
     state.volBaseLive=+ticker.volume; state.volQuoteLive=+ticker.quoteVolume;
@@ -719,13 +838,147 @@ document.getElementById('aiBtn').addEventListener('click', ()=>{
   document.getElementById('sheetBackdrop').classList.add('show');
   document.getElementById('aiSheet').classList.add('show');
 });
-function closeSheet(){ document.getElementById('sheetBackdrop').classList.remove('show'); document.getElementById('aiSheet').classList.remove('show'); }
+function closeSheet(){
+  document.getElementById('sheetBackdrop').classList.remove('show');
+  document.getElementById('aiSheet').classList.remove('show');
+  document.getElementById('indSheet').classList.remove('show');
+}
 document.getElementById('sheetBackdrop').addEventListener('click', closeSheet);
 document.getElementById('sheetClose').addEventListener('click', closeSheet);
+document.getElementById('indSheetClose').addEventListener('click', closeSheet);
+
+// ---- Toolbar icons: ⛶ fullscreen · ☰ chart type · ▦ indicator manager (matches real Binance's 3-icon toolbar) ----
+const fsBtn=document.getElementById('fsToggleBtn');
+fsBtn.addEventListener('click', ()=>{
+  document.querySelector('.frame').classList.toggle('fullscreen');
+  const isFs=document.querySelector('.frame').classList.contains('fullscreen');
+  fsBtn.classList.toggle('active', isFs);
+  fsBtn.textContent = isFs? '⛝':'⛶';
+  fsBtn.title = isFs? 'ອອກຈາກເຕັມຈໍ':'ຂະຫຍາຍເຕັມຈໍ';
+  // canvases need to re-measure their new CSS height before redrawing
+  requestAnimationFrame(()=>{ drawCandles(); updatePanels(); });
+});
+
+const chartTypeBtn=document.getElementById('chartTypeBtn');
+chartTypeBtn.addEventListener('click', ()=>{
+  state.chartType = state.chartType==='candle' ? 'line' : 'candle';
+  chartTypeBtn.classList.toggle('active', state.chartType==='line');
+  showToast(state.chartType==='line' ? 'ປະເພດກາບ: ເສັ້ນ (Line)' : 'ປະເພດກາບ: ແທ່ງທຽນ (Candlestick)');
+  drawCandles();
+});
+
+function renderIndGrid(){
+  const grid=document.getElementById('indGrid');
+  grid.innerHTML='';
+  Object.keys(state.indicators).forEach(key=>{
+    const btn=document.createElement('button');
+    const implemented = key in IMPLEMENTED_INDICATORS;
+    btn.textContent = key + (implemented? ' ★':'');
+    btn.classList.toggle('active', state.indicators[key]);
+    btn.addEventListener('click', ()=>{
+      state.indicators[key]=!state.indicators[key];
+      btn.classList.toggle('active', state.indicators[key]);
+      document.querySelectorAll(`#mainIndRow button[data-ind="${key}"], #subIndRow button[data-ind="${key}"]`).forEach(b=>b.classList.toggle('active', state.indicators[key]));
+      drawCandles(); updatePanels();
+      if(!implemented) showToast(key+' — ຈະສະແດງຜົນຢູ່ໃນເວີຊັນຕໍ່ໄປ');
+    });
+    grid.appendChild(btn);
+  });
+}
+document.getElementById('indicatorMenuBtn').addEventListener('click', ()=>{
+  renderIndGrid();
+  document.getElementById('sheetBackdrop').classList.add('show');
+  document.getElementById('indSheet').classList.add('show');
+});
 
 loadAssetTf();
 startPollingFallback();
 window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
+
+// ---- Chart pan (drag) + zoom (pinch / wheel) + jump-to-live ----
+(function initChartGestures(){
+  const canvas=document.getElementById('chartMain');
+  const jumpBtn=document.getElementById('liveJumpBtn');
+  const pointers=new Map();
+  let panState=null, pinchState=null, lastTapT=0, lastTapX=0;
+
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function midX(a,b){ return (a.x+b.x)/2; }
+
+  function startPan(clientX){
+    panState={ startX:clientX, startViewStart:state.view.start, bw:(canvas.clientWidth||1)/state.view.count };
+  }
+  function startPinch(){
+    const pts=[...pointers.values()];
+    const rect=canvas.getBoundingClientRect();
+    panState=null;
+    pinchState={
+      startDist: dist(pts[0],pts[1]),
+      startCount: state.view.count,
+      startStart: state.view.start,
+      anchorFrac: Math.min(1,Math.max(0,(midX(pts[0],pts[1])-rect.left)/(rect.width||1)))
+    };
+  }
+  function applyZoom(newCount, anchorFrac, baseStart, baseCount){
+    newCount=Math.round(Math.max(MIN_VISIBLE, Math.min(newCount, Math.max(state.candles.length,MIN_VISIBLE))));
+    const anchorIdx = baseStart + anchorFrac*baseCount;
+    state.view.count=newCount;
+    state.view.start=Math.round(anchorIdx - anchorFrac*newCount);
+    clampView();
+    drawCandles(); updatePanels();
+    maybeLoadMoreHistory();
+  }
+
+  canvas.addEventListener('pointerdown', e=>{
+    try{ canvas.setPointerCapture(e.pointerId); }catch(err){}
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pointers.size===1){
+      startPan(e.clientX);
+      const now=Date.now();
+      if(now-lastTapT<300 && Math.abs(e.clientX-lastTapX)<24){ resetViewToLive(); drawCandles(); updatePanels(); panState=null; }
+      lastTapT=now; lastTapX=e.clientX;
+    } else if(pointers.size===2){
+      startPinch();
+    }
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinchState && pointers.size>=2){
+      const pts=[...pointers.values()];
+      const newDist=dist(pts[0],pts[1])||1;
+      const scale=pinchState.startDist/newDist;
+      applyZoom(pinchState.startCount*scale, pinchState.anchorFrac, pinchState.startStart, pinchState.startCount);
+    } else if(panState && pointers.size===1){
+      const dx=e.clientX-panState.startX;
+      state.view.start=Math.round(panState.startViewStart - dx/panState.bw);
+      clampView();
+      drawCandles(); updatePanels();
+      maybeLoadMoreHistory();
+    }
+  });
+  function endPointer(e){
+    pointers.delete(e.pointerId);
+    if(pointers.size<2) pinchState=null;
+    if(pointers.size===1){ const p=[...pointers.values()][0]; startPan(p.x); }
+    else if(pointers.size===0){ panState=null; }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', e=>{ if(pointers.has(e.pointerId)) endPointer(e); });
+
+  canvas.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const rect=canvas.getBoundingClientRect();
+    const frac=Math.min(1,Math.max(0,(e.clientX-rect.left)/(rect.width||1)));
+    const factor = e.deltaY>0? 1.15 : 0.87;
+    applyZoom(state.view.count*factor, frac, state.view.start, state.view.count);
+  }, {passive:false});
+
+  canvas.addEventListener('dblclick', ()=>{ resetViewToLive(); drawCandles(); updatePanels(); });
+
+  jumpBtn.addEventListener('click', ()=>{ resetViewToLive(); drawCandles(); updatePanels(); });
+})();
 </script>
 </body>
 </html>
