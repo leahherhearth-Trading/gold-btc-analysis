@@ -43,6 +43,8 @@
   .chartwrap .ovl{position:absolute;top:3px;left:6px;font-size:10px;color:var(--muted);z-index:3;line-height:1.5;pointer-events:none;}
   .chartwrap .ovl b{font-weight:700;}
   canvas{width:100%;display:block;background:#0b0e11;}
+  #chartMain{height:230px;}
+  #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:70px;}
   .pricetag{position:absolute;right:0;background:var(--yellow);color:#000;font-size:10px;font-weight:700;padding:1px 4px;border-radius:2px 0 0 2px;z-index:4;}
 
   .indicator-row{display:flex;gap:14px;padding:6px 10px;overflow-x:auto;border-bottom:1px solid var(--border);}
@@ -94,6 +96,30 @@
   .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);background:#2b2f36;color:#fff;padding:9px 16px;
     border-radius:8px;font-size:12px;z-index:30;opacity:0;transition:opacity .25s;max-width:88%;text-align:center;}
   .toast.show{opacity:1;}
+
+  /* Responsive: adapt layout width and chart heights to bigger screens (tablet/desktop) instead of staying locked at phone width */
+  @media (min-width: 600px){
+    html,body{font-size:14px;}
+    .frame{max-width:600px;}
+    .sheet{max-width:600px;}
+    #chartMain{height:300px;}
+    #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:100px;}
+    .price-big{font-size:26px;}
+  }
+  @media (min-width: 900px){
+    html,body{font-size:15px;}
+    .frame{max-width:760px;}
+    .sheet{max-width:760px;}
+    #chartMain{height:380px;}
+    #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:120px;}
+    .price-big{font-size:30px;}
+  }
+  @media (min-width: 1280px){
+    .frame{max-width:960px;}
+    .sheet{max-width:960px;}
+    #chartMain{height:460px;}
+    #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:140px;}
+  }
 </style>
 </head>
 <body>
@@ -125,6 +151,7 @@
     <div>
       <div class="price-big mono" id="bigPrice">2415.31</div>
       <div class="price-sub mono" id="priceSub">$2415.31 <span id="pctChange">-0.04%</span></div>
+      <div id="connStatus" style="font-size:9px;color:var(--muted);margin-top:2px;">● ກຳລັງເຊື່ອມຕໍ່...</div>
     </div>
     <div class="price-stats mono">
       <div>24h ສູງ <b id="hi24">2425.14</b></div>
@@ -292,10 +319,19 @@ function stochRsiSeries(closes,period=14){
   return {k,d};
 }
 
+function setupCanvas(canvas){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+  canvas.width = Math.max(1, Math.round(w*dpr));
+  canvas.height = Math.max(1, Math.round(h*dpr));
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx, w, h};
+}
+
 function drawLineChart(canvasId, seriesArr, colors, opts={}){
   const canvas=document.getElementById(canvasId);
-  const ctx=canvas.getContext('2d');
-  const w=canvas.width=canvas.clientWidth; const h=canvas.height=canvas.clientHeight;
+  const {ctx,w,h} = setupCanvas(canvas);
   ctx.clearRect(0,0,w,h);
   const all = seriesArr.flat().filter(v=>v!=null && isFinite(v));
   if(!all.length) return;
@@ -314,8 +350,7 @@ function drawLineChart(canvasId, seriesArr, colors, opts={}){
 
 function drawCandles(){
   const canvas=document.getElementById('chartMain');
-  const ctx=canvas.getContext('2d');
-  const w=canvas.width=canvas.clientWidth; const h=canvas.height=canvas.clientHeight;
+  const {ctx,w,h} = setupCanvas(canvas);
   ctx.clearRect(0,0,w,h);
   const c=state.candles;
   const closes=c.map(x=>x.close);
@@ -374,8 +409,8 @@ function updatePanels(){
     document.getElementById('macdOvl').innerHTML = `DIF: ${fmtLo(m.dif[m.dif.length-1],2)} <span style="color:#a78bfa;">DEA: ${fmtLo(m.dea[m.dea.length-1],2)}</span> <span style="color:#f0b90b;">MACD: ${fmtLo(m.hist[m.hist.length-1],2)}</span>`;
   }
   if(state.indicators.VOL){
-    const canvas=document.getElementById('chartVOL'); const ctx=canvas.getContext('2d');
-    const w=canvas.width=canvas.clientWidth, h=canvas.height=canvas.clientHeight;
+    const canvas=document.getElementById('chartVOL');
+    const {ctx,w,h} = setupCanvas(canvas);
     ctx.clearRect(0,0,w,h);
     const vols=c.map(x=>x.volume); const maxV=Math.max(...vols)||1; const bw=w/vols.length;
     c.forEach((cd,i)=>{ ctx.fillStyle= cd.close>=cd.open?'rgba(14,203,129,0.6)':'rgba(246,70,93,0.6)'; const bh=cd.volume/maxV*h; ctx.fillRect(i*bw,h-bh,Math.max(1,bw*0.6),bh); });
@@ -544,8 +579,18 @@ function closeWs(){
   if(ws){ try{ ws.onclose=null; ws.onerror=null; ws.onmessage=null; ws.close(); }catch(e){} ws=null; }
 }
 
+function setConnStatus(mode){
+  const el=document.getElementById('connStatus');
+  if(!el) return;
+  if(mode==='live'){ el.innerHTML='<span style="color:#0ecb81;">●</span> LIVE (WebSocket ກັບ Binance)'; }
+  else if(mode==='poll'){ el.innerHTML='<span style="color:#f0b90b;">●</span> ອັບເດດທຸກ ~4 ວິ (ໂໝດສຳຮອງ, WebSocket ໃຊ້ບໍ່ໄດ້)'; }
+  else if(mode==='connecting'){ el.innerHTML='<span style="color:#848e9c;">●</span> ກຳລັງເຊື່ອມຕໍ່...'; }
+  else { el.innerHTML='<span style="color:#f6465d;">●</span> ບໍ່ໄດ້ເຊື່ອມຕໍ່ — ກວດອິນເຕີເນັດ'; }
+}
+
 function connectStream(){
   closeWs();
+  setConnStatus('connecting');
   const cfg=ASSETS[state.asset];
   const sym=cfg.symbol.toLowerCase();
   const interval=TF_BINANCE[state.tf]||'5m';
@@ -553,8 +598,9 @@ function connectStream(){
   const mySeq = state.loadSeq;
   let sock;
   try{ sock = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`); }
-  catch(e){ return; }
+  catch(e){ setConnStatus('poll'); return; }
   ws = sock;
+  sock.onopen = ()=>{ if(mySeq===state.loadSeq) setConnStatus('live'); };
   sock.onmessage = (ev)=>{
     if(mySeq!==state.loadSeq) return;
     let msg;
@@ -578,7 +624,12 @@ function connectStream(){
       renderOrderBook(data);
     }
   };
-  sock.onclose = ()=>{ if(mySeq===state.loadSeq){ setTimeout(()=>{ if(mySeq===state.loadSeq) connectStream(); }, 3000); } };
+  sock.onclose = ()=>{
+    if(mySeq===state.loadSeq){
+      setConnStatus('poll');
+      setTimeout(()=>{ if(mySeq===state.loadSeq) connectStream(); }, 3000);
+    }
+  };
   sock.onerror = ()=>{ try{ sock.close(); }catch(e){} };
 }
 
@@ -586,6 +637,7 @@ function startPollingFallback(){
   clearInterval(window._pollT);
   window._pollT=setInterval(async ()=>{
     if(ws && ws.readyState===WebSocket.OPEN) return;
+    setConnStatus('poll');
     const mySeq = state.loadSeq;
     const cfg=ASSETS[state.asset];
     const interval=TF_BINANCE[state.tf]||'5m';
