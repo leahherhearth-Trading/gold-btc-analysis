@@ -180,6 +180,7 @@
   #lockScreen .term-line .cursor{display:inline-block;width:7px;height:13px;background:var(--acc);margin-left:2px;
     animation:lockBlink 1s step-end infinite;vertical-align:middle;}
   @keyframes lockBlink{50%{opacity:0;}}
+  @keyframes aiLivePulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
 
   #lockScreen .pass-row{display:flex;gap:8px;align-items:center;border:1px solid var(--acc-dim);border-radius:4px;
     padding:9px 10px;background:rgba(0,217,255,0.05);}
@@ -363,7 +364,7 @@
   <div class="sheet-backdrop" id="sheetBackdrop"></div>
   <div class="sheet" id="aiSheet">
     <button class="closebtn" id="sheetClose">✕</button>
-    <h4>AI MARKET ANALYSIS — Decision Support Only</h4>
+    <h4>AI MARKET ANALYSIS — Decision Support Only <span id="aiLiveDot" style="font-size:10px;font-weight:700;color:#0ecb81;letter-spacing:0.5px;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#0ecb81;margin-right:4px;box-shadow:0 0 6px #0ecb81;animation:aiLivePulse 1.4s infinite;"></span>LIVE</span></h4>
     <div id="biasLine" class="bias buy">🟢 BUY BIAS</div>
     <div style="font-size:11px;color:var(--muted);">Signal Strength (Confluence Score) — never a "win probability"</div>
     <div class="strength-bar"><div class="strength-fill" id="strengthFill" style="width:60%;"></div></div>
@@ -836,30 +837,55 @@ function updatePanels(){
     drawLineChart('chartSTOCH',[sliceView(srAll.k),sliceView(srAll.d)],['#f0b90b','#a78bfa'],{fixedRange:[0,100]});
     document.getElementById('stochOvl').innerHTML = `<span style="color:#f0b90b;">STOCHRSI: ${fmtLo(srAll.k[srAll.k.length-1],2)}</span> <span style="color:#a78bfa;">STOCHRSI: ${fmtLo(srAll.d[srAll.d.length-1],2)}</span>`;
   }
+  // Real-time AI analysis: while the AI sheet is open, refresh it on every
+  // live tick / kline update so it always reflects the current chart —
+  // no need to close and reopen it.
+  const aiSheetEl=document.getElementById('aiSheet');
+  if(aiSheetEl && aiSheetEl.classList.contains('show')) renderAiSheet();
 }
 
+// Every input below is computed live from the actual candle stream (state.candles) —
+// no random numbers anywhere. This is a heuristic confluence checklist, not a prediction:
+// Signal Strength is literally "how many of these real, computable checks currently agree."
 function computeSignal(){
-  const closes=state.candles.map(x=>x.close);
+  const candles=state.candles;
+  const closes=candles.map(x=>x.close);
+  const vols=candles.map(x=>x.volume);
   const e20=ema(closes,20), e50=ema(closes,50);
   const last=closes[closes.length-1];
-  const trendUp=last>e20[e20.length-1]&&e20[e20.length-1]>e50[e50.length-1];
-  const trendDown=last<e20[e20.length-1]&&e20[e20.length-1]<e50[e50.length-1];
+  const e20V=e20[e20.length-1], e50V=e50[e50.length-1];
+  const trendUp=last>e20V&&e20V>e50V;
+  const trendDown=last<e20V&&e20V<e50V;
   const r=rsiSeries(closes,14); const rsiV=r[r.length-1];
-  const rnd=seededRand(state.asset.length*7+state.tf.length*13+(TF_SECONDS[state.tf]||60));
-  const vol=['LOW','NORMAL','HIGH','EXTREME'][Math.floor(rnd()*4*0.7)];
+  const m=macdSeries(closes); const histV=m.hist[m.hist.length-1];
+  const midAll=sma(closes,20), sdAll=stddev(closes,20,midAll);
+  const midV=midAll[midAll.length-1], sdV=sdAll[sdAll.length-1];
+  const upperBand=midV+2*sdV, lowerBand=midV-2*sdV;
+  const bandWidthPct = midV? (4*sdV/midV*100) : 0; // BOLL band width as % of price — a real volatility proxy
+  const vol = bandWidthPct<0.6?'LOW': bandWidthPct<1.5?'NORMAL': bandWidthPct<3?'HIGH':'EXTREME';
+  const ma5Vol=sma(vols,5); const lastVolMA=ma5Vol[ma5Vol.length-1];
+  const volAboveAvg = lastVolMA? vols[vols.length-1]>lastVolMA : false;
+  const withinBands = isFinite(last) && last<=upperBand && last>=lowerBand;
+
   let dir=trendUp?'BUY':trendDown?'SELL':'NEUTRAL';
-  let score=trendUp||trendDown?55+Math.floor(rnd()*40):30+Math.floor(rnd()*20);
+  const checklist=[
+    {name:'Trend (EMA20 vs EMA50)',passed:dir!=='NEUTRAL'},
+    {name:'Price vs EMA20',passed:(dir==='BUY'&&last>e20V)||(dir==='SELL'&&last<e20V)},
+    {name:'Momentum (RSI)',passed:(dir==='BUY'&&rsiV>50)||(dir==='SELL'&&rsiV<50)},
+    {name:'MACD Confirmation',passed:(dir==='BUY'&&histV>0)||(dir==='SELL'&&histV<0)},
+    {name:'Volume vs MA(5)',passed:volAboveAvg},
+    {name:'Price within BOLL Bands',passed:withinBands},
+    {name:'Volatility (not extreme)',passed:vol!=='EXTREME'},
+  ];
+  const passedCount=checklist.filter(c=>c.passed).length;
+  const score = dir==='NEUTRAL'
+    ? Math.round(30 + (passedCount/checklist.length)*20)
+    : Math.round(40 + (passedCount/checklist.length)*60);
   let bias='WAIT',biasClass='wait',icon='🟡';
   if(vol==='EXTREME'){bias='NO TRADE';biasClass='no_trade';icon='⛔';}
   else if(dir==='BUY'&&score>=55){bias='BUY BIAS';biasClass='buy';icon='🟢';}
   else if(dir==='SELL'&&score>=55){bias='SELL BIAS';biasClass='sell';icon='🔴';}
   else if(dir==='NEUTRAL'&&score<45){bias='NO TRADE';biasClass='no_trade';icon='⛔';}
-  const checklist=[
-    {name:'Higher TF Trend',passed:dir!=='NEUTRAL'},{name:'Current Trend',passed:dir!=='NEUTRAL'},
-    {name:'Market Structure',passed:score>=55},{name:'Momentum',passed:(dir==='BUY'&&rsiV>50)||(dir==='SELL'&&rsiV<50)},
-    {name:'Volume',passed:rnd()>0.35},{name:'Support/Resistance',passed:rnd()>0.3},
-    {name:'Spread',passed:true},{name:'Volatility',passed:vol!=='EXTREME'},{name:'News Risk',passed:true},
-  ];
   return {dir,bias,biasClass,icon,score,vol,rsiV,checklist,trend:trendUp?'BULLISH':trendDown?'BEARISH':'SIDEWAYS'};
 }
 
