@@ -146,9 +146,99 @@
     #chartMain{height:460px;}
     #chartMACD,#chartVOL,#chartRSI,#chartKDJ,#chartSTOCH{height:140px;}
   }
+
+  /* =====================================================================
+     Lock screen (page passcode gate) — cyber-security / terminal style
+     ===================================================================== */
+  :root{ --acc:#00d9ff; --acc-dim:#0a4a6b; --lock-red:#ff3b3b; }
+  body.locked{ overflow:hidden; }
+  body.locked .frame{ display:none; }
+
+  #rainCanvas{position:fixed;inset:0;width:100%;height:100%;z-index:996;opacity:0.55;}
+  #scanlines{position:fixed;inset:0;z-index:998;pointer-events:none;
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0px, rgba(0,0,0,0) 1px, rgba(0,0,0,0.35) 2px, rgba(0,0,0,0) 3px);
+    mix-blend-mode:multiply;}
+  #scanlines::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse at center, rgba(0,217,255,0.08) 0%, rgba(0,0,0,0.55) 100%);}
+
+  #lockScreen{position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;
+    padding:20px;transition:opacity .6s ease, visibility .6s ease;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  #lockScreen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
+
+  #lockScreen .term{width:100%;max-width:420px;background:rgba(3,8,14,0.88);border:1px solid var(--acc);
+    border-radius:6px;padding:22px 22px 26px;box-shadow:0 0 18px rgba(0,217,255,0.4), inset 0 0 40px rgba(0,217,255,0.06);
+    color:var(--acc);position:relative;}
+  #lockScreen .term::before{content:"● ● ●";position:absolute;top:8px;left:14px;font-size:9px;letter-spacing:3px;color:var(--acc-dim);}
+
+  #lockScreen .term-head{text-align:center;margin-top:10px;margin-bottom:16px;}
+  #lockScreen .term-head .lock-ic{font-size:30px;filter:drop-shadow(0 0 6px rgba(0,217,255,0.85));}
+  #lockScreen .term-head h1{font-size:15px;letter-spacing:2px;margin:8px 0 2px;text-transform:uppercase;}
+  #lockScreen .term-head p{font-size:10.5px;color:var(--acc-dim);margin:0;letter-spacing:1px;}
+
+  #lockScreen .term-line{font-size:12px;line-height:1.7;white-space:pre-wrap;min-height:78px;margin-bottom:10px;}
+  #lockScreen .term-line .cursor{display:inline-block;width:7px;height:13px;background:var(--acc);margin-left:2px;
+    animation:lockBlink 1s step-end infinite;vertical-align:middle;}
+  @keyframes lockBlink{50%{opacity:0;}}
+
+  #lockScreen .pass-row{display:flex;gap:8px;align-items:center;border:1px solid var(--acc-dim);border-radius:4px;
+    padding:9px 10px;background:rgba(0,217,255,0.05);}
+  #lockScreen .pass-row span.prompt{color:var(--acc);font-size:13px;}
+  #lockScreen .pass-row input{flex:1;background:none;border:none;outline:none;color:var(--acc);font-size:14px;
+    font-family:inherit;letter-spacing:3px;}
+  #lockScreen .pass-row input::placeholder{color:var(--acc-dim);letter-spacing:1px;}
+
+  #lockScreen .btnrow{display:flex;gap:10px;margin-top:14px;}
+  #lockScreen #unlockBtn{flex:1;background:var(--acc);color:#001826;border:none;border-radius:4px;padding:10px 0;
+    font-weight:800;font-size:12.5px;letter-spacing:1.5px;cursor:pointer;font-family:inherit;
+    text-transform:uppercase;}
+  #lockScreen #unlockBtn:disabled{background:#0a2f3d;color:#0a4a6b;cursor:not-allowed;}
+  #lockScreen #unlockBtn:active:not(:disabled){transform:translateY(1px);}
+
+  #lockScreen .lock-attempts{font-size:10px;color:var(--acc-dim);margin-top:10px;text-align:center;letter-spacing:0.5px;}
+  #lockScreen .lock-attempts.warn{color:#ffcc00;}
+  #lockScreen .lock-attempts.err{color:var(--lock-red);}
+
+  #lockScreen .shake{animation:lockShake .35s;}
+  @keyframes lockShake{
+    10%,90%{transform:translateX(-1px);}
+    20%,80%{transform:translateX(2px);}
+    30%,50%,70%{transform:translateX(-5px);}
+    40%,60%{transform:translateX(5px);}
+  }
+  #lockScreen .glitch{animation:lockGlitch .35s;}
+  @keyframes lockGlitch{
+    0%,100%{border-color:var(--acc); box-shadow:0 0 18px rgba(0,217,255,0.4);}
+    30%{border-color:var(--lock-red); box-shadow:0 0 22px rgba(255,59,59,0.55);}
+    60%{border-color:var(--lock-red); box-shadow:0 0 22px rgba(255,59,59,0.35);}
+  }
+
+  #lockScreen .footnote{text-align:center;font-size:9px;color:var(--acc-dim);margin-top:16px;letter-spacing:0.5px;}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<canvas id="rainCanvas"></canvas>
+<div id="scanlines"></div>
+
+<div id="lockScreen">
+  <div class="term" id="termBox">
+    <div class="term-head">
+      <div class="lock-ic">🔒</div>
+      <h1>Future Trading</h1>
+      <p>AI Gold &amp; Bitcoin Analysis — Private Access</p>
+    </div>
+    <div class="term-line" id="termLine">&gt; SYSTEM READY<span class="cursor"></span></div>
+    <div class="pass-row">
+      <span class="prompt">&gt;</span>
+      <input id="passInput" type="password" inputmode="text" autocomplete="off" placeholder="ໃສ່ລະຫັດເຂົ້າ / ENTER ACCESS CODE" maxlength="20" />
+    </div>
+    <div class="btnrow"><button id="unlockBtn">ປົດລັອກ / UNLOCK</button></div>
+    <div class="lock-attempts" id="attemptsMsg">ຄວາມພະຍາຍາມ: 0 / 5</div>
+    <div class="footnote">KGS Individual Enterprise · Decision Support Only</div>
+  </div>
+</div>
+
 <div class="frame">
   <div class="demo-banner">⚠ LIVE DATA (Binance) — Gold ໃຊ້ PAXG ເປັນຕົວແທນ (proxy) · Decision Support Only, no order is ever sent automatically</div>
 
@@ -293,6 +383,167 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* =====================================================================
+   Lock screen (page passcode gate)
+   ⚠ ໝາຍເຫດ: ນີ້ແມ່ນ "ຜ້າກັ້ງໜ້າເວັບ" ແບບງ່າຍໆຝັ່ງ client-side ເທົ່ານັ້ນ (ບໍ່ແມ່ນລະບົບ login
+   ຄວາມປອດໄພຈິງ). ເນື່ອງຈາກເປັນເວັບ static (GitHub Pages, ບໍ່ມີ server/database),
+   ຄົນທີ່ຮູ້ວິທີເປີດ "View Page Source" ຈະສາມາດເຫັນລະຫັດຢູ່ໃນໂຄ້ດໄດ້ຢູ່ດີ.
+   ເໝາະສຳລັບກັນຄົນທົ່ວໄປບໍ່ໃຫ້ບຸກເຂົ້າມາເບິ່ງ ບໍ່ແມ່ນສຳລັບປົກປ້ອງຂໍ້ມູນລັບ/ການເງິນ.
+   ===================================================================== */
+// ລະຫັດຜ່ານ — ປ່ຽນຄ່າໃນເຄື່ອງໝາຍ "..." ນີ້ ເພື່ອຕັ້ງລະຫັດໃໝ່ເອງໄດ້ຕະຫຼອດເວລາ
+const ACCESS_CODE = "1234";
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_SECONDS = 30;
+let lockAttempts = 0;
+let lockedOutUntil = 0;
+
+(function initLockScreen(){
+  const lockScreen = document.getElementById('lockScreen');
+  const termBox = document.getElementById('termBox');
+  const termLine = document.getElementById('termLine');
+  const passInput = document.getElementById('passInput');
+  const unlockBtn = document.getElementById('unlockBtn');
+  const attemptsMsg = document.getElementById('attemptsMsg');
+
+  function setLine(text){
+    termLine.innerHTML = text.replace(/\n/g,'<br>') + '<span class="cursor"></span>';
+  }
+  function shakeAndGlitch(){
+    termBox.classList.remove('shake','glitch');
+    void termBox.offsetWidth;
+    termBox.classList.add('shake','glitch');
+  }
+
+  // ---- Sound effects (Web Audio API — no sound files needed) ----
+  let audioCtx=null;
+  function ensureAudio(){
+    if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function playTone(freq, duration, type, volume){
+    const ctx=ensureAudio(); if(!ctx) return;
+    const osc=ctx.createOscillator(), gain=ctx.createGain();
+    osc.type=type; osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(volume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+duration);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime+duration);
+  }
+  function playTypeSound(){ playTone(650+Math.random()*150, 0.03, 'square', 0.045); }
+  function playErrorAlarm(){
+    playTone(880, 0.16, 'sawtooth', 0.09);
+    setTimeout(()=>playTone(440, 0.24, 'sawtooth', 0.09), 160);
+  }
+  passInput.addEventListener('input', playTypeSound);
+
+  function unlockSuccess(){
+    lockScreen.classList.add('hidden');
+    document.body.classList.remove('locked');
+    // stop + remove the matrix-rain/CRT overlay entirely — otherwise the canvas's last
+    // drawn frame stays visible forever once the animation loop stops
+    document.getElementById('rainCanvas').style.display='none';
+    document.getElementById('scanlines').style.display='none';
+    if(typeof startDashboard === 'function') startDashboard();
+  }
+
+  function tryUnlock(){
+    const now = Date.now();
+    if(now < lockedOutUntil){
+      const secLeft = Math.ceil((lockedOutUntil-now)/1000);
+      setLine(`> ACCESS TEMPORARILY LOCKED\n> ລອງໃໝ່ອີກ ${secLeft} ວິນາທີ`);
+      shakeAndGlitch();
+      playErrorAlarm();
+      return;
+    }
+    const val = passInput.value.trim();
+    if(val.length===0) return;
+
+    if(val === ACCESS_CODE){
+      setLine('> ACCESS GRANTED ✓\n> ກຳລັງເປີດລະບົບ...');
+      attemptsMsg.textContent = 'ຖືກຕ້ອງ — ຍິນດີຕ້ອນຮັບ';
+      attemptsMsg.className = 'lock-attempts';
+      attemptsMsg.style.color = 'var(--acc)';
+      unlockBtn.disabled = true;
+      passInput.disabled = true;
+      setTimeout(unlockSuccess, 900);
+      return;
+    }
+
+    lockAttempts++;
+    passInput.value='';
+    shakeAndGlitch();
+    playErrorAlarm();
+
+    if(lockAttempts>=MAX_ATTEMPTS){
+      lockedOutUntil = Date.now() + LOCKOUT_SECONDS*1000;
+      setLine(`> ACCESS DENIED ✗\n> ພະຍາຍາມຫຼາຍເທື່ອເກີນໄປ — ລັອກ ${LOCKOUT_SECONDS} ວິນາທີ`);
+      attemptsMsg.textContent = `ລັອກຊົ່ວຄາວ — ລໍຖ້າ ${LOCKOUT_SECONDS} ວິນາທີ`;
+      attemptsMsg.className = 'lock-attempts err';
+      unlockBtn.disabled = true;
+      passInput.disabled = true;
+      let secLeft = LOCKOUT_SECONDS;
+      const t = setInterval(()=>{
+        secLeft--;
+        if(secLeft<=0){
+          clearInterval(t);
+          lockAttempts=0; lockedOutUntil=0;
+          unlockBtn.disabled=false; passInput.disabled=false;
+          attemptsMsg.textContent = `ຄວາມພະຍາຍາມ: 0 / ${MAX_ATTEMPTS}`;
+          attemptsMsg.className='lock-attempts';
+          setLine('> SYSTEM READY');
+          passInput.focus();
+        } else {
+          attemptsMsg.textContent = `ລັອກຊົ່ວຄາວ — ລໍຖ້າ ${secLeft} ວິນາທີ`;
+        }
+      },1000);
+    } else {
+      setLine('> ACCESS DENIED ✗\n> ລະຫັດບໍ່ຖືກຕ້ອງ, ລອງໃໝ່ອີກຄັ້ງ');
+      attemptsMsg.textContent = `ຄວາມພະຍາຍາມ: ${lockAttempts} / ${MAX_ATTEMPTS}`;
+      attemptsMsg.className = lockAttempts>=MAX_ATTEMPTS-1 ? 'lock-attempts warn' : 'lock-attempts';
+    }
+  }
+
+  unlockBtn.addEventListener('click', tryUnlock);
+  passInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
+  window.addEventListener('load', ()=>passInput.focus());
+
+  // ---- Matrix rain background ----
+  const canvas = document.getElementById('rainCanvas');
+  const ctx = canvas.getContext('2d');
+  const chars = '01฿$₭%+-XAU BTC USDT ';
+  let cols, drops;
+  function resize(){
+    const dpr = window.devicePixelRatio||1;
+    canvas.width = window.innerWidth*dpr;
+    canvas.height = window.innerHeight*dpr;
+    canvas.style.width = window.innerWidth+'px';
+    canvas.style.height = window.innerHeight+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cols = Math.floor(window.innerWidth/16);
+    drops = Array.from({length:cols}, ()=>Math.random()*-50);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  function drawRain(){
+    if(lockScreen.classList.contains('hidden')) return; // stop once unlocked — saves battery/CPU
+    ctx.fillStyle='rgba(0,0,0,0.08)';
+    ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+    ctx.font='14px ui-monospace, monospace';
+    for(let i=0;i<cols;i++){
+      const ch = chars[Math.floor(Math.random()*chars.length)];
+      const x = i*16;
+      const y = drops[i]*16;
+      ctx.fillStyle = Math.random()>0.94 ? '#c9f5ff' : '#00d9ff';
+      ctx.fillText(ch, x, y);
+      if(y>window.innerHeight && Math.random()>0.975) drops[i]=0;
+      drops[i]++;
+    }
+    requestAnimationFrame(drawRain);
+  }
+  drawRain();
+})();
+
 const ASSETS = {
   XAUUSD: {label:'XAU/USD', quote:'USD', baseSymbol:'XAU', symbol:'PAXGUSDT', decimals:2},
   BTCUSDT: {label:'BTC/USDT', quote:'USDT', baseSymbol:'BTC', symbol:'BTCUSDT', decimals:2},
@@ -307,6 +558,7 @@ let ws=null;
 // ---- Pan/Zoom view window ----
 const MIN_VISIBLE=15;      // most zoomed-in (fewest candles on screen)
 const DEFAULT_VISIBLE=60;  // default zoom level when a timeframe first loads / jump-to-live
+const CHART_AXIS_W=54;     // reserved right-edge width for the y-axis price scale in drawCandles() — gesture math below must match
 let noMoreHistory=false;   // true once Binance returns no earlier candles for this asset/tf
 let loadingMoreHistory=false;
 
@@ -435,22 +687,52 @@ function drawLineChart(canvasId, seriesArr, colors, opts={}){
   });
 }
 
+function formatAxisTime(ms){
+  const d = new Date(ms);
+  const pad2=n=>String(n).padStart(2,'0');
+  const mm=pad2(d.getMonth()+1), dd=pad2(d.getDate()), hh=pad2(d.getHours()), mi=pad2(d.getMinutes());
+  if(state.tf==='1D') return `${d.getFullYear()}-${mm}-${dd}`;
+  return `${mm}-${dd} ${hh}:${mi}`;
+}
+
 function drawCandles(){
   const canvas=document.getElementById('chartMain');
-  const {ctx,w,h} = setupCanvas(canvas);
-  ctx.clearRect(0,0,w,h);
+  const {ctx,w,h:hFull} = setupCanvas(canvas);
+  ctx.clearRect(0,0,w,hFull);
   const cAll=state.candles;
   const c=sliceView(cAll);
   if(!c.length) return;
+  const AXIS_W=CHART_AXIS_W, AXIS_H=16; // reserved space for right-side price scale + bottom date labels (Binance-style)
+  const h=hFull-AXIS_H, chartW=w-AXIS_W;
   const closesAll=cAll.map(x=>x.close);
   const highs=c.map(x=>x.high), lows=c.map(x=>x.low);
   const maxP=Math.max(...highs), minP=Math.min(...lows);
   const pad=(maxP-minP)*0.08||1; const yMax=maxP+pad, yMin=minP-pad;
   const y=p=>h-((p-yMin)/(yMax-yMin))*h;
-  const bw=w/c.length;
+  const bw=chartW/c.length;
 
   ctx.strokeStyle='#161a1e';
-  for(let i=0;i<5;i++){ const yy=h/5*i; ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(w,yy); ctx.stroke(); }
+  for(let i=0;i<=5;i++){ const yy=h/5*i; ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(chartW,yy); ctx.stroke(); }
+
+  // Y-axis price scale (right edge) — matches Binance's price ladder
+  ctx.fillStyle='#848e9c'; ctx.font='9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(let i=0;i<=5;i++){
+    const yy=h/5*i;
+    const price=yMax-(yy/h)*(yMax-yMin);
+    ctx.fillText(fmt(price), chartW+4, Math.max(6,Math.min(h-6,yy)));
+  }
+
+  // X-axis date/time labels (bottom edge)
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  const labelCount=Math.min(4, c.length);
+  for(let i=0;i<labelCount;i++){
+    const idx=Math.round(i*(c.length-1)/Math.max(1,labelCount-1));
+    const cd=c[idx];
+    if(!cd || cd.time==null) continue;
+    const x=idx*bw+bw/2;
+    ctx.fillText(formatAxisTime(cd.time), Math.max(24,Math.min(chartW-24,x)), h+3);
+  }
 
   if(state.chartType==='line'){
     const grad=ctx.createLinearGradient(0,0,0,h);
@@ -485,6 +767,15 @@ function drawCandles(){
     const lastMidAll=midAll[midAll.length-1], lastSdAll=sdAll[sdAll.length-1];
     document.getElementById('bollOvl').innerHTML = `BOLL:(20,2) <span style="color:#f0b90b;">UP: ${fmtLo(lastMidAll+2*lastSdAll,2)}</span> <span style="color:#e879f9;">MB: ${fmtLo(lastMidAll,2)}</span> <span style="color:#a78bfa;">DN: ${fmtLo(lastMidAll-2*lastSdAll,2)}</span>`;
   } else { document.getElementById('bollOvl').innerHTML=''; }
+
+  // Dashed current-price line across the chart — matches Binance's live-price guide line
+  if(state.followLive){
+    const priceY=y(c[c.length-1].close);
+    ctx.save();
+    ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(240,185,11,0.7)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,priceY); ctx.lineTo(chartW,priceY); ctx.stroke();
+    ctx.restore();
+  }
 
   const tag=document.getElementById('priceTag');
   const showTag = state.followLive;
@@ -891,8 +1182,15 @@ document.getElementById('indicatorMenuBtn').addEventListener('click', ()=>{
   document.getElementById('indSheet').classList.add('show');
 });
 
-loadAssetTf();
-startPollingFallback();
+// Dashboard data/network activity waits until the lock screen is passed —
+// avoids fetching live market data (and showing connection error toasts) while still locked.
+let dashboardStarted = false;
+function startDashboard(){
+  if(dashboardStarted) return;
+  dashboardStarted = true;
+  loadAssetTf();
+  startPollingFallback();
+}
 window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
 
 // ---- Chart pan (drag) + zoom (pinch / wheel) + jump-to-live ----
@@ -905,8 +1203,9 @@ window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function midX(a,b){ return (a.x+b.x)/2; }
 
+  function chartAreaWidth(){ return Math.max(1,(canvas.clientWidth||1)-CHART_AXIS_W); }
   function startPan(clientX){
-    panState={ startX:clientX, startViewStart:state.view.start, bw:(canvas.clientWidth||1)/state.view.count };
+    panState={ startX:clientX, startViewStart:state.view.start, bw:chartAreaWidth()/state.view.count };
   }
   function startPinch(){
     const pts=[...pointers.values()];
@@ -916,7 +1215,7 @@ window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
       startDist: dist(pts[0],pts[1]),
       startCount: state.view.count,
       startStart: state.view.start,
-      anchorFrac: Math.min(1,Math.max(0,(midX(pts[0],pts[1])-rect.left)/(rect.width||1)))
+      anchorFrac: Math.min(1,Math.max(0,(midX(pts[0],pts[1])-rect.left)/chartAreaWidth()))
     };
   }
   function applyZoom(newCount, anchorFrac, baseStart, baseCount){
@@ -970,7 +1269,7 @@ window.addEventListener('resize', ()=>{ drawCandles(); updatePanels(); });
   canvas.addEventListener('wheel', e=>{
     e.preventDefault();
     const rect=canvas.getBoundingClientRect();
-    const frac=Math.min(1,Math.max(0,(e.clientX-rect.left)/(rect.width||1)));
+    const frac=Math.min(1,Math.max(0,(e.clientX-rect.left)/chartAreaWidth()));
     const factor = e.deltaY>0? 1.15 : 0.87;
     applyZoom(state.view.count*factor, frac, state.view.start, state.view.count);
   }, {passive:false});
